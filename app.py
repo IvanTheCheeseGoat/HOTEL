@@ -66,6 +66,12 @@ def extract_key_sentiments_keywords(review):
     keywords = ', '.join(r.get_ranked_phrases()[:5])
     return analysis.sentiment, keywords
 
+# Function to generate a summary of the review
+def generate_summary(review):
+    sentences = review.split('.')
+    summary = '. '.join(sentences[:2]) + '.' if len(sentences) > 1 else review
+    return summary
+
 # Function to train or load the sentiment classifier with hyperparameter tuning
 def train_or_load_model():
     try:
@@ -121,10 +127,9 @@ def classify_sentiment_model(review, model, vectorizer):
     review_vec = vectorizer.transform([review])
     prediction = model.predict(review_vec)[0]
     
-    if 'not' in review or 'but' in review:
-        analysis = TextBlob(review)
-        if analysis.sentiment.polarity <= 0:
-            return 'Negative'
+    analysis = TextBlob(review)
+    if analysis.sentiment.polarity <= 0:
+        return 'Negative'
     
     return 'Positive' if prediction == 1 else 'Negative'
 
@@ -158,6 +163,7 @@ if uploaded_file is not None:
         sentiments = []
         details = []
         keywords = []
+        summaries = []
         progress_bar = st.progress(0)
         for i, review in enumerate(df['Review']):
             if model and vectorizer:
@@ -168,12 +174,14 @@ if uploaded_file is not None:
             analysis, keyword = extract_key_sentiments_keywords(review)
             details.append(f'Polarity: {analysis.polarity}, Subjectivity: {analysis.subjectivity}')
             keywords.append(keyword)
+            summaries.append(generate_summary(review))
             sentiments.append(sentiment)
             progress_bar.progress((i + 1) / len(df))
 
         df['Sentiment'] = sentiments
         df['Sentiment Details'] = details
         df['Keywords'] = keywords
+        df['Summary'] = summaries
 
         st.write("Processing complete.")
         st.write(df)
