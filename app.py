@@ -21,9 +21,8 @@ from wordcloud import WordCloud
 st.set_page_config(page_title="Hotel Review Sentiment Analysis", layout="wide")
 
 # Download NLTK data
-nltk.data.path.append(os.path.join(os.path.dirname(__file__), 'nltk_data'))
-nltk.download('stopwords', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
-nltk.download('punkt', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
+nltk.download('stopwords')
+nltk.download('punkt')
 
 stop_words = set(stopwords.words('english'))
 
@@ -173,8 +172,7 @@ if uploaded_file is not None:
             if model and vectorizer:
                 sentiment = classify_sentiment_model(review, model, vectorizer)
             else:
-                analysis = TextBlob(review)
-                sentiment = 'Positive' if analysis.sentiment.polarity > 0 else 'Negative'
+                sentiment = classify_sentiment_model(review, model, vectorizer)
             analysis, keyword = extract_key_sentiments_keywords(review)
             details.append(f'Polarity: {analysis.polarity}, Subjectivity: {analysis.subjectivity}')
             keywords.append(keyword)
@@ -191,17 +189,19 @@ if uploaded_file is not None:
         st.write(df)
         
         sentiment_counts = df['Sentiment'].value_counts()
-        st.bar_chart(sentiment_counts)
-
-        fig, ax = plt.subplots()
-        sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax)
-        ax.set_ylabel('')
-        ax.set_title('Sentiment Distribution')
-        st.pyplot(fig)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.bar_chart(sentiment_counts)
+        with col2:
+            fig, ax = plt.subplots()
+            sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax)
+            ax.set_ylabel('')
+            ax.set_title('Sentiment Distribution')
+            st.pyplot(fig)
         
         keyword_text = ' '.join(df['Keywords'])
-        wordcloud = WordCloud(width=800, height=400, background_color='white').generate(keyword_text)
-        plt.figure(figsize=(10, 5))
+        wordcloud = WordCloud(width=400, height=200, background_color='white').generate(keyword_text)
+        plt.figure(figsize=(5, 2.5))
         plt.imshow(wordcloud, interpolation='bilinear')
         plt.axis('off')
         st.pyplot(plt)
@@ -219,4 +219,4 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
-        st.error("Uploaded file does not contain 'Review' column. Please check the file and try again.")
+        st.error("Uploaded file does not contain 'Review' column. Please check the file.")
