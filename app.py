@@ -33,24 +33,26 @@ except LookupError:
     st.error("NLTK data not found. Please ensure 'stopwords' and 'punkt' are downloaded.")
 
 # Function to fetch training data from GitHub
-def fetch_training_data(url):
+def fetch_training_data(url, db_path):
     try:
         response = requests.get(url)
         response.raise_for_status()
-        data = pd.read_csv(BytesIO(response.content))
-        return data
+        with open(db_path, 'wb') as f:
+            f.write(response.content)
+        return db_path
     except Exception as e:
         st.error(f"Failed to fetch training data: {e}")
         return None
 
 # URL to the training data in the GitHub repository
 training_data_url = "https://raw.githubusercontent.com/IvanTheCheeseGoat/HOTEL/main/training_data.db"
+db_path = 'training_data.db'
 
 # Fetch training data
-training_df = fetch_training_data(training_data_url)
+if not os.path.exists(db_path):
+    fetch_training_data(training_data_url, db_path)
 
 # Initialize SQLite database
-db_path = 'training_data.db'
 if not os.path.exists(db_path):
     st.error(f"Database file not found at {db_path}")
 else:
@@ -146,9 +148,6 @@ def train_or_load_model():
 
 # Enhanced sentiment classification function
 def classify_sentiment_model(review, model, vectorizer):
-    if model is None or vectorizer is None:
-        return 'Unknown'
-    
     review = preprocess_text(review)
     review_vec = vectorizer.transform([review])
     prediction = model.predict(review_vec)[0]
@@ -162,14 +161,23 @@ def classify_sentiment_model(review, model, vectorizer):
     
     return 'Positive' if prediction == 1 else 'Negative'
 
-# Load initial model and vectorizer
-model, vectorizer = train_or_load_model()
-
 st.title('Hotel Review Sentiment Analysis')
 st.write('Input the source and upload an Excel file containing hotel reviews to get sentiment analysis.')
 
 source = st.text_input("Source")
 uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
+
+training_data_file = st.file_uploader("Upload training data (optional, for improving the model)", type="xlsx")
+
+model = None
+vectorizer = None
+
+if training_data_file is not None:
+    training_df = pd.read_excel(training_data_file)
+    for _, row in training_df.iterrows():
+        cursor.execute('INSERT INTO reviews (review, sentiment) VALUES (?, ?)', (row['Review'], row['Sentiment']))
+    conn.commit()
+    model, vectorizer = train_or_load_model()
 
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
@@ -186,7 +194,10 @@ if uploaded_file is not None:
         summaries = []
         progress_bar = st.progress(0)
         for i, review in enumerate(df['Review']):
-            sentiment = classify_sentiment_model(review, model, vectorizer)
+            if model and vectorizer:
+                sentiment = classify_sentiment_model(review, model, vectorizer)
+            else:
+                sentiment = classify_sentiment_model(review, model, vectorizer)
             analysis, keyword = extract_key_sentiments_keywords(review)
             details.append(f'Polarity: {analysis.polarity}, Subjectivity: {analysis.subjectivity}')
             keywords.append(keyword)
@@ -218,8 +229,10 @@ if uploaded_file is not None:
 
         output = BytesIO()
         df.to_excel(output, index=False)
-        st.download_button(label="Download Results", data=output.getvalue(), file_name="sentiment_analysis_results.xlsx")
-    else:
-        st.error("The uploaded file must contain a 'Review' column.")
+        st.download_button(label="Download Results", data=output.getvalue(), file_name="results.xlsx")
+
 else:
-    st.info("Please upload a file to proceed with the analysis.")
+    st.write("Please upload an Excel file to proceed.")
+
+# Close the database connection
+conn.close()
