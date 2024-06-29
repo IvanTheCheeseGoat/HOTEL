@@ -20,6 +20,9 @@ from wordcloud import WordCloud
 # Set Streamlit page configuration
 st.set_page_config(page_title="Hotel Review Sentiment Analysis", layout="wide")
 
+# Apply dark theme to matplotlib
+plt.style.use('dark_background')
+
 # Download NLTK data
 nltk.download('stopwords')
 nltk.download('punkt')
@@ -195,24 +198,29 @@ if uploaded_file is not None:
         col1, col2 = st.columns(2)
         with col1:
             st.subheader("Sentiment Distribution")
-            st.bar_chart(sentiment_counts)
+            fig1, ax1 = plt.subplots(figsize=(5, 2.5))
+            sentiment_counts.plot.bar(ax=ax1, color=['#ff9999', '#66b3ff'])
+            st.pyplot(fig1)
         with col2:
-            fig, ax = plt.subplots()
-            sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax, colors=['#ff9999','#66b3ff','#99ff99'])
-            ax.set_ylabel('')
-            ax.set_title('Sentiment Distribution')
-            st.pyplot(fig)
+            fig2, ax2 = plt.subplots(figsize=(5, 2.5))
+            sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax2, colors=['#ff9999','#66b3ff','#99ff99'])
+            ax2.set_ylabel('')
+            ax2.set_title('Sentiment Distribution')
+            st.pyplot(fig2)
         
+        st.subheader("Keyword Cloud")
         keyword_text = ' '.join(df['Keywords'])
-        wordcloud = WordCloud(width=400, height=200, background_color='white').generate(keyword_text)
-        plt.figure(figsize=(5, 2.5))
-        plt.imshow(wordcloud, interpolation='bilinear')
-        plt.axis('off')
-        st.pyplot(plt)
+        wordcloud = WordCloud(width=400, height=200, background_color='black').generate(keyword_text)
+        fig3, ax3 = plt.subplots(figsize=(5, 2.5))
+        ax3.imshow(wordcloud, interpolation='bilinear')
+        ax3.axis('off')
+        st.pyplot(fig3)
         
         st.subheader("Top Keywords")
         keyword_series = pd.Series(' '.join(df['Keywords']).split(', ')).value_counts().head(20)
-        st.bar_chart(keyword_series)
+        fig4, ax4 = plt.subplots(figsize=(5, 2.5))
+        keyword_series.plot.bar(ax=ax4, color='#66b3ff')
+        st.pyplot(fig4)
         
         output = BytesIO()
         df.to_excel(output, index=False)
