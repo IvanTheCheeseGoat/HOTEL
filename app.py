@@ -16,13 +16,16 @@ from imblearn.over_sampling import SMOTE
 import sqlite3
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
+import plotly.express as px
+import pickle
 
 # Set Streamlit page configuration
 st.set_page_config(page_title="Hotel Review Sentiment Analysis", layout="wide")
 
 # Download NLTK data
-nltk.download('stopwords')
-nltk.download('punkt')
+nltk.data.path.append(os.path.join(os.path.dirname(__file__), 'nltk_data'))
+nltk.download('stopwords', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
+nltk.download('punkt', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
 
 stop_words = set(stopwords.words('english'))
 
@@ -73,6 +76,18 @@ def generate_summary(review):
 
 # Function to train or load the sentiment classifier with hyperparameter tuning
 def train_or_load_model():
+    model_path = 'model.pkl'
+    vectorizer_path = 'vectorizer.pkl'
+    
+    # Check if model and vectorizer exist
+    if os.path.exists(model_path) and os.path.exists(vectorizer_path):
+        with open(model_path, 'rb') as model_file, open(vectorizer_path, 'rb') as vectorizer_file:
+            model = pickle.load(model_file)
+            vectorizer = pickle.load(vectorizer_file)
+        st.success("Model and vectorizer loaded from disk.")
+        return model, vectorizer
+    
+    # Train model if not found
     try:
         df = pd.read_sql('SELECT * FROM reviews', conn)
     except Exception as e:
@@ -119,12 +134,17 @@ def train_or_load_model():
     accuracy = accuracy_score(y_test, y_pred)
     st.write(f"Test Accuracy: {accuracy * 100:.2f}%")
     
+    # Save model and vectorizer
+    with open(model_path, 'wb') as model_file, open(vectorizer_path, 'wb') as vectorizer_file:
+        pickle.dump(best_model, model_file)
+        pickle.dump(vectorizer, vectorizer_file)
+    
+    st.success("Model and vectorizer saved to disk.")
+    
     return best_model, vectorizer
 
 # Enhanced sentiment classification function
 def classify_sentiment_model(review, model, vectorizer):
-    if model is None or vectorizer is None:
-        return 'Unknown'
     review = preprocess_text(review)
     review_vec = vectorizer.transform([review])
     prediction = model.predict(review_vec)[0]
@@ -150,18 +170,22 @@ model = None
 vectorizer = None
 
 if training_data_file is not None:
-    training_df = pd.read_excel(training_data_file)
-    for _, row in training_df.iterrows():
-        cursor.execute('INSERT INTO reviews (review, sentiment) VALUES (?, ?)', (row['Review'], row['Sentiment']))
-    conn.commit()
-    model, vectorizer = train_or_load_model()
+    try:
+        training_df = pd.read_excel(training_data_file)
+        for _, row in training_df.iterrows():
+            cursor.execute('INSERT INTO reviews (review, sentiment) VALUES (?, ?)', (row['Review'], row['Sentiment']))
+        conn.commit()
+        st.success("Training data uploaded and added to the database.")
+    except Exception as e:
+        st.error(f"Failed to process training data: {e}")
 
-# Load or train the model if no training data is provided
-if model is None or vectorizer is None:
-    model, vectorizer = train_or_load_model()
+model, vectorizer = train_or_load_model()
 
 if uploaded_file is not None:
-    df = pd.read_excel(uploaded_file)
+    try:
+        df = pd.read_excel(uploaded_file)
+    except Exception as e:
+        st.error(f"Failed to read uploaded file: {e}")
     
     if 'Review' in df.columns:
         st.write("Processing reviews, please wait...")
@@ -184,42 +208,39 @@ if uploaded_file is not None:
             progress_bar.progress((i + 1) / len(df))
 
         df['Sentiment'] = sentiments
-        df['Sentiment Details'] = details
+        df['Details'] = details
         df['Keywords'] = keywords
         df['Summary'] = summaries
 
-        st.write("Processing complete.")
-        st.write(df)
-        
-        sentiment_counts = df['Sentiment'].value_counts()
-        col1, col2 = st.columns(2)
-        with col1:
-            st.bar_chart(sentiment_counts)
-        with col2:
-            fig, ax = plt.subplots()
-            sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax)
-            ax.set_ylabel('')
-            ax.set_title('Sentiment Distribution')
-            st.pyplot(fig)
-        
-        keyword_text = ' '.join(df['Keywords'])
-        wordcloud = WordCloud(width=400, height=200, background_color='white').generate(keyword_text)
-        plt.figure(figsize=(5, 2.5))
-        plt.imshow(wordcloud, interpolation='bilinear')
-        plt.axis('off')
-        st.pyplot(plt)
-        
-        keyword_series = pd.Series(' '.join(df['Keywords']).split(', ')).value_counts().head(20)
-        st.bar_chart(keyword_series)
-        
+        st.write("Analysis completed. Here are some sample results:")
+        st.write(df.head())
+
+        st.write("Sentiment Distribution")
+        sentiment_counts = df['Sentiment'].value_counts().reset_index()
+        sentiment_counts.columns = ['Sentiment', 'Count']
+        fig = px.bar(sentiment_counts, x='Sentiment', y='Count', title='Sentiment Distribution')
+        st.plotly_chart(fig)
+
+        st.write("Word Cloud of Keywords")
+        all_keywords = ' '.join(df['Keywords'])
+        wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_keywords)
+        fig, ax = plt.subplots()
+        ax.imshow(wordcloud, interpolation='bilinear')
+        ax.axis('off')
+        st.pyplot(fig)
+
+        st.write("Download the processed data as Excel")
         output = BytesIO()
         df.to_excel(output, index=False)
         output.seek(0)
         st.download_button(
-            label="Download results as Excel",
+            label="Download Excel file",
             data=output,
-            file_name="hotel_reviews_with_sentiments.xlsx",
+            file_name="processed_reviews.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
     else:
-        st.error("Uploaded file does not contain 'Review' column. Please check the file.")
+        st.error("Uploaded file must contain a 'Review' column.")
+else:
+    st.write("Please upload an Excel file containing hotel reviews.")
