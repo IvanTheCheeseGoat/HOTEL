@@ -194,10 +194,11 @@ if uploaded_file is not None:
         sentiment_counts = df['Sentiment'].value_counts()
         col1, col2 = st.columns(2)
         with col1:
+            st.subheader("Sentiment Distribution")
             st.bar_chart(sentiment_counts)
         with col2:
             fig, ax = plt.subplots()
-            sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax)
+            sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax, colors=['#ff9999','#66b3ff','#99ff99'])
             ax.set_ylabel('')
             ax.set_title('Sentiment Distribution')
             st.pyplot(fig)
@@ -209,6 +210,7 @@ if uploaded_file is not None:
         plt.axis('off')
         st.pyplot(plt)
         
+        st.subheader("Top Keywords")
         keyword_series = pd.Series(' '.join(df['Keywords']).split(', ')).value_counts().head(20)
         st.bar_chart(keyword_series)
         
