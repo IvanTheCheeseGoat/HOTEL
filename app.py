@@ -148,6 +148,8 @@ def train_or_load_model():
 
 # Enhanced sentiment classification function
 def classify_sentiment_model(review, model, vectorizer):
+    if model is None or vectorizer is None:
+        return 'Unknown'
     review = preprocess_text(review)
     review_vec = vectorizer.transform([review])
     prediction = model.predict(review_vec)[0]
@@ -169,8 +171,7 @@ uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
 
 training_data_file = st.file_uploader("Upload training data (optional, for improving the model)", type="xlsx")
 
-model = None
-vectorizer = None
+model, vectorizer = None, None
 
 if training_data_file is not None:
     training_df = pd.read_excel(training_data_file)
@@ -197,7 +198,7 @@ if uploaded_file is not None:
             if model and vectorizer:
                 sentiment = classify_sentiment_model(review, model, vectorizer)
             else:
-                sentiment = classify_sentiment_model(review, model, vectorizer)
+                sentiment = classify_sentiment_model(review, None, None)
             analysis, keyword = extract_key_sentiments_keywords(review)
             details.append(f'Polarity: {analysis.polarity}, Subjectivity: {analysis.subjectivity}')
             keywords.append(keyword)
@@ -229,10 +230,9 @@ if uploaded_file is not None:
 
         output = BytesIO()
         df.to_excel(output, index=False)
-        st.download_button(label="Download Results", data=output.getvalue(), file_name="results.xlsx")
-
-else:
-    st.write("Please upload an Excel file to proceed.")
+        st.download_button(label="Download results", data=output.getvalue(), file_name="results.xlsx")
+    else:
+        st.write("Please upload an Excel file to proceed.")
 
 # Close the database connection
 conn.close()
