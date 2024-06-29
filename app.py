@@ -3,6 +3,7 @@ import pandas as pd
 from textblob import TextBlob
 from rake_nltk import Rake
 from io import BytesIO
+import os
 import nltk
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -12,20 +13,15 @@ from sklearn.metrics import accuracy_score
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from imblearn.over_sampling import SMOTE
-import string
-import joblib
 import sqlite3
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-import os
 
 # Set Streamlit page configuration
 st.set_page_config(page_title="Hotel Review Sentiment Analysis", layout="wide")
 
-# Add the local NLTK data path
-nltk.data.path.append(os.path.join(os.path.dirname(__file__), 'nltk_data'))
-
 # Download NLTK data
+nltk.data.path.append(os.path.join(os.path.dirname(__file__), 'nltk_data'))
 nltk.download('stopwords', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
 nltk.download('punkt', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
 
