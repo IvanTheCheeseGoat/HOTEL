@@ -43,11 +43,8 @@ conn.commit()
 
 # Function to preprocess the text
 def preprocess_text(text):
-    # Tokenize the text
     tokens = word_tokenize(text)
-    # Handle negations (e.g., "not good" -> "not_good")
     tokens = [f"{tokens[i]}_{tokens[i+1]}" if tokens[i].lower() == 'not' and i+1 < len(tokens) else tokens[i] for i in range(len(tokens))]
-    # Remove punctuation and stopwords, and convert to lower case
     filtered_tokens = [word.lower() for word in tokens if word.isalpha() and word.lower() not in stop_words]
     return ' '.join(filtered_tokens)
 
@@ -56,12 +53,11 @@ def extract_key_sentiments_keywords(review):
     analysis = TextBlob(review)
     r = Rake()
     r.extract_keywords_from_text(review)
-    keywords = ', '.join(r.get_ranked_phrases()[:5])  # Get top 5 keywords
+    keywords = ', '.join(r.get_ranked_phrases()[:5])
     return analysis.sentiment, keywords
 
 # Function to train or load the sentiment classifier with hyperparameter tuning
 def train_or_load_model():
-    # Load training data from the database
     df = pd.read_sql('SELECT * FROM reviews', conn)
     
     if 'sentiment' not in df.columns:
@@ -73,56 +69,44 @@ def train_or_load_model():
     X = df['review']
     y = df['sentiment'].apply(lambda x: 1 if x.lower() == 'positive' else 0)
     
-    # Check the minimum class count to set n_splits appropriately
     min_class_count = min(y.value_counts())
-    n_splits = min(10, min_class_count) if min_class_count >= 2 else 2  # Ensure at least 2 splits
+    n_splits = min(10, min_class_count) if min_class_count >= 2 else 2
     
-    # Split the data
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
     
-    # Vectorize the text data
     vectorizer = TfidfVectorizer(max_features=500, ngram_range=(1, 2), max_df=0.9, min_df=3)
     X_train_vec = vectorizer.fit_transform(X_train)
     X_test_vec = vectorizer.transform(X_test)
     
-    # Apply SMOTE to balance the classes in the vectorized training set
     smote = SMOTE(random_state=42)
     X_train_res, y_train_res = smote.fit_resample(X_train_vec, y_train)
     
-    # Define the model and hyperparameter grid
     model = LogisticRegression(penalty='l2', class_weight='balanced', solver='liblinear')
     param_grid = {
         'C': [0.01, 0.1, 1, 10, 100]
     }
     
-    # Use Stratified K-Fold with dynamic splits
     stratified_k_fold = StratifiedKFold(n_splits=n_splits)
     
-    # Perform Grid Search with Stratified K-Fold Cross-Validation
     grid_search = GridSearchCV(model, param_grid, cv=stratified_k_fold, scoring='accuracy', n_jobs=-1)
     grid_search.fit(X_train_res, y_train_res)
     
-    # Best model
     best_model = grid_search.best_estimator_
     
-    # Cross-validation accuracy
     cv_scores = cross_val_score(best_model, X_train_res, y_train_res, cv=stratified_k_fold)
     st.write(f"Stratified K-Fold Cross-Validation Accuracy: {cv_scores.mean() * 100:.2f}%")
     
-    # Evaluate the model on the test set
     y_pred = best_model.predict(X_test_vec)
     accuracy = accuracy_score(y_test, y_pred)
     st.write(f"Test Accuracy: {accuracy * 100:.2f}%")
     
     return best_model, vectorizer
 
-# Function to classify sentiment using the trained model
 def classify_sentiment_model(review, model, vectorizer):
     review = preprocess_text(review)
     review_vec = vectorizer.transform([review])
     prediction = model.predict(review_vec)[0]
     
-    # Additional rule-based check for obvious errors
     if 'not' in review or 'but' in review:
         analysis = TextBlob(review)
         if analysis.sentiment.polarity <= 0:
@@ -130,17 +114,14 @@ def classify_sentiment_model(review, model, vectorizer):
     
     return 'Positive' if prediction == 1 else 'Negative'
 
-# Streamlit app layout
 st.title('Hotel Review Sentiment Analysis')
 st.write('Input the source and upload an Excel file containing hotel reviews to get sentiment analysis.')
 
 source = st.text_input("Source")
 uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
 
-# Load existing training data
 training_data_file = st.file_uploader("Upload training data (optional, for improving the model)", type="xlsx")
 
-# Initialize model and vectorizer
 model = None
 vectorizer = None
 
@@ -160,7 +141,6 @@ if uploaded_file is not None:
         df['Source'] = source
         df['Date'] = pd.to_datetime('today').date()
 
-        # Extract sentiments and keywords with progress bar
         sentiments = []
         details = []
         keywords = []
@@ -184,18 +164,15 @@ if uploaded_file is not None:
         st.write("Processing complete.")
         st.write(df)
         
-        # Display sentiment distribution as a bar chart
         sentiment_counts = df['Sentiment'].value_counts()
         st.bar_chart(sentiment_counts)
 
-        # Display a pie chart of sentiment distribution
         fig, ax = plt.subplots()
         sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax)
         ax.set_ylabel('')
         ax.set_title('Sentiment Distribution')
         st.pyplot(fig)
         
-        # Display a word cloud of keywords
         keyword_text = ' '.join(df['Keywords'])
         wordcloud = WordCloud(width=800, height=400, background_color='white').generate(keyword_text)
         plt.figure(figsize=(10, 5))
@@ -203,41 +180,17 @@ if uploaded_file is not None:
         plt.axis('off')
         st.pyplot(plt)
         
-        # Display top 10 keywords
-        keyword_series = pd.Series(' '.join(df['Keywords']).split(', ')).value_counts().head(10)
-        st.table(keyword_series)
-
-        # Display sentiment polarity histogram
-        df['Polarity'] = df['Review'].apply(lambda x: TextBlob(x).sentiment.polarity)
-        plt.figure(figsize=(10, 5))
-        plt.hist(df['Polarity'], bins=20, color='skyblue', edgecolor='black')
-        plt.title('Sentiment Polarity Distribution')
-        plt.xlabel('Polarity')
-        plt.ylabel('Frequency')
-        st.pyplot(plt)
+        keyword_series = pd.Series(' '.join(df['Keywords']).split(', ')).value_counts().head(20)
+        st.bar_chart(keyword_series)
         
-        # Display trend line for sentiment over time
-        df['Date'] = pd.to_datetime(df['Date'])
-        sentiment_trend = df.groupby(df['Date'].dt.to_period('D')).size().reset_index(name='Counts')
-        sentiment_trend['Date'] = sentiment_trend['Date'].dt.to_timestamp()
-        plt.figure(figsize=(10, 5))
-        plt.plot(sentiment_trend['Date'], sentiment_trend['Counts'], marker='o')
-        plt.title('Trend of Reviews Over Time')
-        plt.xlabel('Date')
-        plt.ylabel('Number of Reviews')
-        st.pyplot(plt)
-        
-        # Option to download as Excel
-        def to_excel(df):
-            output = BytesIO()
-            writer = pd.ExcelWriter(output, engine='xlsxwriter')
-            df.to_excel(writer, index=False, sheet_name='Sheet1')
-            writer.close()
-            processed_data = output.getvalue()
-            return processed_data
-        
-        st.download_button(label="Download data as Excel", data=to_excel(df), file_name='reviews_with_sentiments.xlsx', mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        output = BytesIO()
+        df.to_excel(output, index=False)
+        output.seek(0)
+        st.download_button(
+            label="Download results as Excel",
+            data=output,
+            file_name="hotel_reviews_with_sentiments.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     else:
-        st.error("The uploaded file does not contain a 'Review' column. Please check your file and try again.")
-else:
-    st.info("Please upload an Excel file to proceed.")
+        st.error("Uploaded file does not contain 'Review' column. Please check the file and try again.")
