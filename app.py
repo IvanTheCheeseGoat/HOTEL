@@ -102,7 +102,7 @@ def train_or_load_model():
     X_train_vec = vectorizer.fit_transform(X_train)
     X_test_vec = vectorizer.transform(X_test)
     
-    smote = SMOTE(random_state=42)
+    smote = SMote(random_state=42)
     X_train_res, y_train_res = smote.fit_resample(X_train_vec, y_train)
     
     model = LogisticRegression(penalty='l2', class_weight='balanced', solver='liblinear')
@@ -128,6 +128,9 @@ def train_or_load_model():
 
 # Enhanced sentiment classification function
 def classify_sentiment_model(review, model, vectorizer):
+    if model is None or vectorizer is None:
+        return 'Unknown'
+    
     review = preprocess_text(review)
     review_vec = vectorizer.transform([review])
     prediction = model.predict(review_vec)[0]
