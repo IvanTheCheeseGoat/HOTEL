@@ -190,30 +190,25 @@ if uploaded_file is not None:
         st.write("Processing complete.")
         st.write(df)
         
-        # Visualizing sentiment counts
         sentiment_counts = df['Sentiment'].value_counts()
         st.bar_chart(sentiment_counts)
 
-        # Visualizing sentiment distribution as a pie chart
-        fig, ax = plt.subplots(figsize=(6, 4))
+        fig, ax = plt.subplots()
         sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax)
         ax.set_ylabel('')
         ax.set_title('Sentiment Distribution')
         st.pyplot(fig)
         
-        # Generating and displaying word cloud for keywords
         keyword_text = ' '.join(df['Keywords'])
-        wordcloud = WordCloud(width=600, height=300, background_color='white').generate(keyword_text)
-        plt.figure(figsize=(8, 4))
+        wordcloud = WordCloud(width=800, height=400, background_color='white').generate(keyword_text)
+        plt.figure(figsize=(10, 5))
         plt.imshow(wordcloud, interpolation='bilinear')
         plt.axis('off')
         st.pyplot(plt)
         
-        # Bar chart of top 20 keywords
         keyword_series = pd.Series(' '.join(df['Keywords']).split(', ')).value_counts().head(20)
         st.bar_chart(keyword_series)
         
-        # Saving and offering processed data for download
         output = BytesIO()
         df.to_excel(output, index=False)
         output.seek(0)
