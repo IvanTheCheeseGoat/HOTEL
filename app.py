@@ -122,13 +122,17 @@ def train_or_load_model():
     
     return best_model, vectorizer
 
+# Enhanced sentiment classification function
 def classify_sentiment_model(review, model, vectorizer):
     review = preprocess_text(review)
     review_vec = vectorizer.transform([review])
     prediction = model.predict(review_vec)[0]
     
     analysis = TextBlob(review)
-    if analysis.sentiment.polarity <= 0:
+    negative_words = ['not', 'no', 'none', 'never', 'nothing', 'nowhere', 'neither', 'nor', 'nobody']
+    negative_present = any(neg in review.split() for neg in negative_words)
+    
+    if analysis.sentiment.polarity <= 0 or negative_present:
         return 'Negative'
     
     return 'Positive' if prediction == 1 else 'Negative'
