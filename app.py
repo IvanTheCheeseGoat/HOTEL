@@ -123,6 +123,8 @@ def train_or_load_model():
 
 # Enhanced sentiment classification function
 def classify_sentiment_model(review, model, vectorizer):
+    if model is None or vectorizer is None:
+        return 'Unknown'
     review = preprocess_text(review)
     review_vec = vectorizer.transform([review])
     prediction = model.predict(review_vec)[0]
