@@ -17,13 +17,17 @@ import joblib
 import sqlite3
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
+import os
 
 # Set Streamlit page configuration
 st.set_page_config(page_title="Hotel Review Sentiment Analysis", layout="wide")
 
+# Add the local NLTK data path
+nltk.data.path.append(os.path.join(os.path.dirname(__file__), 'nltk_data'))
+
 # Download NLTK data
-nltk.download('stopwords')
-nltk.download('punkt')
+nltk.download('stopwords', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
+nltk.download('punkt', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
 
 stop_words = set(stopwords.words('english'))
 
