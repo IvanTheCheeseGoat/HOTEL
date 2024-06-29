@@ -156,10 +156,6 @@ if training_data_file is not None:
     conn.commit()
     model, vectorizer = train_or_load_model()
 
-# Load or train the model if no training data is provided
-if model is None or vectorizer is None:
-    model, vectorizer = train_or_load_model()
-
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
     
@@ -175,7 +171,10 @@ if uploaded_file is not None:
         summaries = []
         progress_bar = st.progress(0)
         for i, review in enumerate(df['Review']):
-            sentiment = classify_sentiment_model(review, model, vectorizer)
+            if model and vectorizer:
+                sentiment = classify_sentiment_model(review, model, vectorizer)
+            else:
+                sentiment = classify_sentiment_model(review, model, vectorizer)
             analysis, keyword = extract_key_sentiments_keywords(review)
             details.append(f'Polarity: {analysis.polarity}, Subjectivity: {analysis.subjectivity}')
             keywords.append(keyword)
