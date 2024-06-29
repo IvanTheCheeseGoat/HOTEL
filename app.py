@@ -5,7 +5,6 @@ from rake_nltk import Rake
 from io import BytesIO
 import os
 import nltk
-import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -17,42 +16,18 @@ from imblearn.over_sampling import SMOTE
 import sqlite3
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-import plotly.express as px
 
 # Set Streamlit page configuration
 st.set_page_config(page_title="Hotel Review Sentiment Analysis", layout="wide")
 
-# Initialize NLTK data path
-nltk.data.path.append(os.path.join(os.path.dirname(__file__), 'nltk_data'))
+# Download NLTK data
+nltk.download('stopwords')
+nltk.download('punkt')
 
-# Check if NLTK data is available
-try:
-    stop_words = set(stopwords.words('english'))
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    st.error("NLTK data not found. Please ensure 'stopwords' and 'punkt' are downloaded.")
-
-# Function to fetch training data from GitHub
-def fetch_training_data(url, db_path):
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        with open(db_path, 'wb') as f:
-            f.write(response.content)
-        return db_path
-    except Exception as e:
-        st.error(f"Failed to fetch training data: {e}")
-        return None
-
-# URL to the training data in the GitHub repository
-training_data_url = "https://raw.githubusercontent.com/IvanTheCheeseGoat/HOTEL/main/training_data.db"
-db_path = 'training_data.db'
-
-# Fetch training data
-if not os.path.exists(db_path):
-    fetch_training_data(training_data_url, db_path)
+stop_words = set(stopwords.words('english'))
 
 # Initialize SQLite database
+db_path = 'training_data.db'
 if not os.path.exists(db_path):
     st.error(f"Database file not found at {db_path}")
 else:
@@ -171,13 +146,18 @@ uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
 
 training_data_file = st.file_uploader("Upload training data (optional, for improving the model)", type="xlsx")
 
-model, vectorizer = None, None
+model = None
+vectorizer = None
 
 if training_data_file is not None:
     training_df = pd.read_excel(training_data_file)
     for _, row in training_df.iterrows():
         cursor.execute('INSERT INTO reviews (review, sentiment) VALUES (?, ?)', (row['Review'], row['Sentiment']))
     conn.commit()
+    model, vectorizer = train_or_load_model()
+
+# Load or train the model if no training data is provided
+if model is None or vectorizer is None:
     model, vectorizer = train_or_load_model()
 
 if uploaded_file is not None:
@@ -195,10 +175,7 @@ if uploaded_file is not None:
         summaries = []
         progress_bar = st.progress(0)
         for i, review in enumerate(df['Review']):
-            if model and vectorizer:
-                sentiment = classify_sentiment_model(review, model, vectorizer)
-            else:
-                sentiment = classify_sentiment_model(review, None, None)
+            sentiment = classify_sentiment_model(review, model, vectorizer)
             analysis, keyword = extract_key_sentiments_keywords(review)
             details.append(f'Polarity: {analysis.polarity}, Subjectivity: {analysis.subjectivity}')
             keywords.append(keyword)
@@ -207,32 +184,42 @@ if uploaded_file is not None:
             progress_bar.progress((i + 1) / len(df))
 
         df['Sentiment'] = sentiments
-        df['Details'] = details
+        df['Sentiment Details'] = details
         df['Keywords'] = keywords
         df['Summary'] = summaries
 
-        st.write("Analysis completed. Here are some sample results:")
-        st.write(df.head())
-
-        st.write("Sentiment Distribution")
-        sentiment_counts = df['Sentiment'].value_counts().reset_index()
-        sentiment_counts.columns = ['Sentiment', 'Count']
-        fig = px.bar(sentiment_counts, x='Sentiment', y='Count', title='Sentiment Distribution')
-        st.plotly_chart(fig)
-
-        st.write("Word Cloud of Keywords")
-        all_keywords = ' '.join(df['Keywords'])
-        wordcloud = WordCloud(width=800, height=400, background_color='white').generate(all_keywords)
-        fig, ax = plt.subplots()
-        ax.imshow(wordcloud, interpolation='bilinear')
-        ax.axis('off')
-        st.pyplot(fig)
-
+        st.write("Processing complete.")
+        st.write(df)
+        
+        sentiment_counts = df['Sentiment'].value_counts()
+        col1, col2 = st.columns(2)
+        with col1:
+            st.bar_chart(sentiment_counts)
+        with col2:
+            fig, ax = plt.subplots()
+            sentiment_counts.plot.pie(autopct='%1.1f%%', ax=ax)
+            ax.set_ylabel('')
+            ax.set_title('Sentiment Distribution')
+            st.pyplot(fig)
+        
+        keyword_text = ' '.join(df['Keywords'])
+        wordcloud = WordCloud(width=400, height=200, background_color='white').generate(keyword_text)
+        plt.figure(figsize=(5, 2.5))
+        plt.imshow(wordcloud, interpolation='bilinear')
+        plt.axis('off')
+        st.pyplot(plt)
+        
+        keyword_series = pd.Series(' '.join(df['Keywords']).split(', ')).value_counts().head(20)
+        st.bar_chart(keyword_series)
+        
         output = BytesIO()
         df.to_excel(output, index=False)
-        st.download_button(label="Download results", data=output.getvalue(), file_name="results.xlsx")
+        output.seek(0)
+        st.download_button(
+            label="Download results as Excel",
+            data=output,
+            file_name="hotel_reviews_with_sentiments.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     else:
-        st.write("Please upload an Excel file to proceed.")
-
-# Close the database connection
-conn.close()
+        st.error("Uploaded file does not contain 'Review' column. Please check the file.")
