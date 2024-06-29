@@ -17,17 +17,19 @@ import sqlite3
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 import plotly.express as px
-import pickle
 
 # Set Streamlit page configuration
 st.set_page_config(page_title="Hotel Review Sentiment Analysis", layout="wide")
 
-# Download NLTK data
+# Initialize NLTK data path
 nltk.data.path.append(os.path.join(os.path.dirname(__file__), 'nltk_data'))
-nltk.download('stopwords', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
-nltk.download('punkt', download_dir=os.path.join(os.path.dirname(__file__), 'nltk_data'))
 
-stop_words = set(stopwords.words('english'))
+# Check if NLTK data is available
+try:
+    stop_words = set(stopwords.words('english'))
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    st.error("NLTK data not found. Please ensure 'stopwords' and 'punkt' are downloaded.")
 
 # Initialize SQLite database
 db_path = 'training_data.db'
@@ -76,18 +78,6 @@ def generate_summary(review):
 
 # Function to train or load the sentiment classifier with hyperparameter tuning
 def train_or_load_model():
-    model_path = 'model.pkl'
-    vectorizer_path = 'vectorizer.pkl'
-    
-    # Check if model and vectorizer exist
-    if os.path.exists(model_path) and os.path.exists(vectorizer_path):
-        with open(model_path, 'rb') as model_file, open(vectorizer_path, 'rb') as vectorizer_file:
-            model = pickle.load(model_file)
-            vectorizer = pickle.load(vectorizer_file)
-        st.success("Model and vectorizer loaded from disk.")
-        return model, vectorizer
-    
-    # Train model if not found
     try:
         df = pd.read_sql('SELECT * FROM reviews', conn)
     except Exception as e:
@@ -134,13 +124,6 @@ def train_or_load_model():
     accuracy = accuracy_score(y_test, y_pred)
     st.write(f"Test Accuracy: {accuracy * 100:.2f}%")
     
-    # Save model and vectorizer
-    with open(model_path, 'wb') as model_file, open(vectorizer_path, 'wb') as vectorizer_file:
-        pickle.dump(best_model, model_file)
-        pickle.dump(vectorizer, vectorizer_file)
-    
-    st.success("Model and vectorizer saved to disk.")
-    
     return best_model, vectorizer
 
 # Enhanced sentiment classification function
@@ -170,22 +153,14 @@ model = None
 vectorizer = None
 
 if training_data_file is not None:
-    try:
-        training_df = pd.read_excel(training_data_file)
-        for _, row in training_df.iterrows():
-            cursor.execute('INSERT INTO reviews (review, sentiment) VALUES (?, ?)', (row['Review'], row['Sentiment']))
-        conn.commit()
-        st.success("Training data uploaded and added to the database.")
-    except Exception as e:
-        st.error(f"Failed to process training data: {e}")
-
-model, vectorizer = train_or_load_model()
+    training_df = pd.read_excel(training_data_file)
+    for _, row in training_df.iterrows():
+        cursor.execute('INSERT INTO reviews (review, sentiment) VALUES (?, ?)', (row['Review'], row['Sentiment']))
+    conn.commit()
+    model, vectorizer = train_or_load_model()
 
 if uploaded_file is not None:
-    try:
-        df = pd.read_excel(uploaded_file)
-    except Exception as e:
-        st.error(f"Failed to read uploaded file: {e}")
+    df = pd.read_excel(uploaded_file)
     
     if 'Review' in df.columns:
         st.write("Processing reviews, please wait...")
@@ -199,7 +174,10 @@ if uploaded_file is not None:
         summaries = []
         progress_bar = st.progress(0)
         for i, review in enumerate(df['Review']):
-            sentiment = classify_sentiment_model(review, model, vectorizer)
+            if model and vectorizer:
+                sentiment = classify_sentiment_model(review, model, vectorizer)
+            else:
+                sentiment = classify_sentiment_model(review, model, vectorizer)
             analysis, keyword = extract_key_sentiments_keywords(review)
             details.append(f'Polarity: {analysis.polarity}, Subjectivity: {analysis.subjectivity}')
             keywords.append(keyword)
@@ -229,18 +207,10 @@ if uploaded_file is not None:
         ax.axis('off')
         st.pyplot(fig)
 
-        st.write("Download the processed data as Excel")
         output = BytesIO()
         df.to_excel(output, index=False)
-        output.seek(0)
-        st.download_button(
-            label="Download Excel file",
-            data=output,
-            file_name="processed_reviews.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
+        st.download_button(label="Download Results", data=output.getvalue(), file_name="sentiment_analysis_results.xlsx")
     else:
-        st.error("Uploaded file must contain a 'Review' column.")
+        st.error("The uploaded file must contain a 'Review' column.")
 else:
-    st.write("Please upload an Excel file containing hotel reviews.")
+    st.info("Please upload a file to proceed with the analysis.")
