@@ -5,6 +5,7 @@ from rake_nltk import Rake
 from io import BytesIO
 import os
 import nltk
+import requests
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -30,6 +31,23 @@ try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
     st.error("NLTK data not found. Please ensure 'stopwords' and 'punkt' are downloaded.")
+
+# Function to fetch training data from GitHub
+def fetch_training_data(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = pd.read_csv(BytesIO(response.content))
+        return data
+    except Exception as e:
+        st.error(f"Failed to fetch training data: {e}")
+        return None
+
+# URL to the training data in the GitHub repository
+training_data_url = "https://raw.githubusercontent.com/IvanTheCheeseGoat/HOTEL/main/training_data.db"
+
+# Fetch training data
+training_df = fetch_training_data(training_data_url)
 
 # Initialize SQLite database
 db_path = 'training_data.db'
@@ -102,7 +120,7 @@ def train_or_load_model():
     X_train_vec = vectorizer.fit_transform(X_train)
     X_test_vec = vectorizer.transform(X_test)
     
-    smote = SMote(random_state=42)
+    smote = SMOTE(random_state=42)
     X_train_res, y_train_res = smote.fit_resample(X_train_vec, y_train)
     
     model = LogisticRegression(penalty='l2', class_weight='balanced', solver='liblinear')
@@ -144,23 +162,14 @@ def classify_sentiment_model(review, model, vectorizer):
     
     return 'Positive' if prediction == 1 else 'Negative'
 
+# Load initial model and vectorizer
+model, vectorizer = train_or_load_model()
+
 st.title('Hotel Review Sentiment Analysis')
 st.write('Input the source and upload an Excel file containing hotel reviews to get sentiment analysis.')
 
 source = st.text_input("Source")
 uploaded_file = st.file_uploader("Choose an Excel file", type="xlsx")
-
-training_data_file = st.file_uploader("Upload training data (optional, for improving the model)", type="xlsx")
-
-model = None
-vectorizer = None
-
-if training_data_file is not None:
-    training_df = pd.read_excel(training_data_file)
-    for _, row in training_df.iterrows():
-        cursor.execute('INSERT INTO reviews (review, sentiment) VALUES (?, ?)', (row['Review'], row['Sentiment']))
-    conn.commit()
-    model, vectorizer = train_or_load_model()
 
 if uploaded_file is not None:
     df = pd.read_excel(uploaded_file)
@@ -177,10 +186,7 @@ if uploaded_file is not None:
         summaries = []
         progress_bar = st.progress(0)
         for i, review in enumerate(df['Review']):
-            if model and vectorizer:
-                sentiment = classify_sentiment_model(review, model, vectorizer)
-            else:
-                sentiment = classify_sentiment_model(review, model, vectorizer)
+            sentiment = classify_sentiment_model(review, model, vectorizer)
             analysis, keyword = extract_key_sentiments_keywords(review)
             details.append(f'Polarity: {analysis.polarity}, Subjectivity: {analysis.subjectivity}')
             keywords.append(keyword)
