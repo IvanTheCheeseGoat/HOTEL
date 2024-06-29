@@ -28,18 +28,28 @@ nltk.download('punkt', download_dir=os.path.join(os.path.dirname(__file__), 'nlt
 stop_words = set(stopwords.words('english'))
 
 # Initialize SQLite database
-conn = sqlite3.connect('training_data.db')
-cursor = conn.cursor()
+db_path = 'training_data.db'
+if not os.path.exists(db_path):
+    st.error(f"Database file not found at {db_path}")
+else:
+    st.success(f"Database found at {db_path}")
 
-# Create table if it doesn't exist
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS reviews (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    review TEXT,
-    sentiment TEXT
-)
-''')
-conn.commit()
+try:
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    # Create table if it doesn't exist
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        review TEXT,
+        sentiment TEXT
+    )
+    ''')
+    conn.commit()
+    st.success("Database connected and table ensured.")
+except Exception as e:
+    st.error(f"Failed to connect to the database: {e}")
 
 # Function to preprocess the text
 def preprocess_text(text):
@@ -58,7 +68,11 @@ def extract_key_sentiments_keywords(review):
 
 # Function to train or load the sentiment classifier with hyperparameter tuning
 def train_or_load_model():
-    df = pd.read_sql('SELECT * FROM reviews', conn)
+    try:
+        df = pd.read_sql('SELECT * FROM reviews', conn)
+    except Exception as e:
+        st.error(f"Failed to read from database: {e}")
+        return None, None
     
     if 'sentiment' not in df.columns:
         st.error("Training data must include a 'sentiment' column for training the model.")
